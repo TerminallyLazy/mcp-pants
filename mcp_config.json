@@ -1,0 +1,62 @@
+{
+    "mcpServers": {
+      "database": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@supabase/mcp-server-postgrest",
+          "--apiUrl",
+          "***REMOVED***",
+          "--apiKey",
+          "***REMOVED***",
+          "--schema",
+          "public"
+        ]
+      },
+      "sequential-thinking": {
+        "enabled": true,
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-sequential-thinking"
+        ]
+      },
+      "filesystem": {
+        "enabled": true,
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-filesystem",
+          "/home/lazy/Projects"
+        ]
+      },
+      "mcp-installer": {
+        "command": "npx",
+        "args": [
+          "@anaisbetts/mcp-installer"
+        ]
+      },
+      "brave-search": {
+        "enabled": true,
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-brave-search"
+        ],
+        "env": {
+          "BRAVE_API_KEY": "BSAsGPAsbtbA-0P-hX4HEiqfnCpaymR"
+        }
+      },
+      "memory": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-memory"
+        ],
+        "env": {
+          "MEMORY_FILE_PATH": "/home/lazy/Projects/MCP/memory.json"
+        }
+      }
+    }
+  }
+  

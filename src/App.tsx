@@ -17,10 +17,10 @@ interface Tool {
   inputSchema?: any;
 }
 
-interface Prompt {
-  name: string;
-  description?: string;
-}
+// interface Prompt {
+//   name: string;
+//   description?: string;
+// }
 
 interface Resource {
   uri: string;
@@ -57,7 +57,7 @@ const App: React.FC = () => {
   const [connectStatus, setConnectStatus] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [tools, setTools] = useState<Tool[]>([]);
-  const [prompts, setPrompts] = useState<Prompt[]>([]);
+  //const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
@@ -167,26 +167,26 @@ const App: React.FC = () => {
   };
 
   // Fetch prompts from a specific server
-  const fetchPrompts = async (serverName?: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const url = serverName 
-        ? `${backendUrl}/prompts?server_name=${serverName}` 
-        : `${backendUrl}/prompts`;
+  // export const fetchPrompts = async (serverName?: string) => {
+  //   setLoading(true);
+  //   setError(null);
+  //   try {
+  //     const url = serverName 
+  //       ? `${backendUrl}/prompts?server_name=${serverName}` 
+  //       : `${backendUrl}/prompts`;
         
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('Failed to fetch prompts');
+  //     const res = await fetch(url);
+  //     if (!res.ok) throw new Error('Failed to fetch prompts');
       
-      const data = await res.json();
-      setPrompts(data.prompts || []);
-    } catch (error) {
-      console.error("Error fetching prompts", error);
-      setError("Failed to fetch prompts. Make sure you're connected to a server.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  //     //const data = await res.json();
+  //     //setPrompts(data.prompts || []);
+  //   } catch (error) {
+  //     console.error("Error fetching prompts", error);
+  //     setError("Failed to fetch prompts. Make sure you're connected to a server.");
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   // Fetch resources from a specific server
   const fetchResources = async (serverName?: string) => {
@@ -342,7 +342,7 @@ const App: React.FC = () => {
       if (!res.ok) {
         let errorMessage = 'Failed to send message';
         try {
-          const errorData = await res.json();
+          const errorData = await res.json() as { detail?: string };
           errorMessage = errorData.detail || errorMessage;
         } catch (e) {
           // If the response can't be parsed as JSON, use the status text

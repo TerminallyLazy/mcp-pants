@@ -14,6 +14,7 @@ from contextlib import AsyncExitStack
 from dotenv import load_dotenv, find_dotenv
 from datetime import datetime
 import anthropic
+from anthropic_client import AnthropicClient
 
 from mcp import ClientSession, StdioServerParameters, types
 from mcp.client.stdio import stdio_client
@@ -49,7 +50,7 @@ async def handle_sampling_message(message: types.CreateMessageRequestParams) -> 
                 type="text",
                 text="Error: ANTHROPIC_API_KEY environment variable not set.",
             ),
-            model="claude-3-sonnet-20240229",
+            model="claude-3-7-sonnet-20250219",
             stopReason="error",
         )
 
@@ -70,7 +71,7 @@ async def handle_sampling_message(message: types.CreateMessageRequestParams) -> 
             
             # Create messages as shown in the example
             response = client.messages.create(
-                model="claude-3-sonnet-20240229",
+                model="claude-3-7-sonnet-20250219",
                 max_tokens=1024,
                 messages=[
                     {"role": "user", "content": user_message}
@@ -119,7 +120,7 @@ async def handle_sampling_message(message: types.CreateMessageRequestParams) -> 
                 type="text",
                 text=error_message,
             ),
-            model="claude-3-sonnet-20240229",
+            model="claude-3-7-sonnet-20250219",
             stopReason="error",
         )
 
@@ -447,15 +448,23 @@ class MCPConfigClient:
                         # Always add type:object to the schema
                         schema_params['type'] = 'object'
                         
-                        # Format tool for Anthropic API using custom tool format
+                        # THIS IS THE EXACT FORMAT REQUIRED BY ANTHROPIC API
+                        # ACCORDING TO THE ERROR MESSAGE:
+                        # "tools.0: Input tag 'function' found using 'type' does not match any of the expected tags: 'bash_20250124', 'custom', 'text_editor_20250124'"
+                        # We must use 'custom' as the type
                         tool_dict = {
-                            "type": "custom",  # Use custom instead of function
-                            "custom": {
+                            "type": "custom",   # Must be "custom" according to API error
+                            "custom": {         # Must be "custom" according to API error
                                 "name": tool_name,
                                 "description": tool_description,
-                                "input_schema": schema_params
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {}
+                                }
                             }
                         }
+                        
+                        print(f"Created custom-based tool for {tool_name} (using 'custom' type as required by API)")
                         
                         available_tools.append(tool_dict)
                         server_tool_map[tool_name] = server_name
@@ -469,8 +478,8 @@ class MCPConfigClient:
         if available_tools:
             system_prompt += "\n\nYou have access to the following tools from MCP servers:"
             for i, tool in enumerate(available_tools, 1):
-                tool_name = tool['custom']['name']
-                tool_desc = tool['custom']['description']
+                tool_name = tool['custom']['name']  # Using custom as required by API
+                tool_desc = tool['custom']['description']  # Using custom as required by API
                 server = server_tool_map.get(tool_name, "unknown")
                 system_prompt += f"\n{i}. {tool_name} (from {server}): {tool_desc}"
         
@@ -482,7 +491,7 @@ class MCPConfigClient:
                     
                     # Prepare the request parameters
                     kwargs = {
-                        "model": "claude-3-sonnet-20240229",
+                        "model": "claude-3-7-sonnet-20250219",
                         "max_tokens": 4000,
                         "system": system_prompt,
                         "messages": [
@@ -492,7 +501,15 @@ class MCPConfigClient:
                     
                     # If there are server contexts and tools available, add them to the request
                     if server_contexts and available_tools:
+                        print(f"Using {len(available_tools)} tools with minimal schema")
+                        
+                        # Just use the tools without any manipulation
                         kwargs["tools"] = available_tools
+                        
+                        # Print first tool for debugging
+                        if available_tools:
+                            print(f"First tool: {available_tools[0]['custom']['name']}")
+                            print(json.dumps(available_tools[0], indent=2))
                     
                     # Print debugging information
                     print(f"Sending request to Anthropic API using Python client")
@@ -502,13 +519,48 @@ class MCPConfigClient:
                     
                     # Make the API call
                     response = client.messages.create(**kwargs)
-                    return response
+                    
+                    # Convert the response object to a dictionary to avoid "object Message can't be used in 'await' expression"
+                    response_dict = {
+                        "id": response.id,
+                        "model": response.model,
+                        "content": []
+                    }
+                    
+                    # Convert content items
+                    for item in response.content:
+                        content_item = {"type": item.type}
+                        if hasattr(item, "text"):
+                            content_item["text"] = item.text
+                        if item.type == "tool_use":
+                            content_item["id"] = item.id
+                            content_item["name"] = item.name
+                            content_item["input"] = item.input
+                        response_dict["content"].append(content_item)
+                        
+                    # Return the dictionary instead of the Message object
+                    return response_dict
                 except anthropic.APIStatusError as e:
                     # Handle API errors more specifically
                     if e.status_code == 401:
                         print("Authentication error: The API key appears to be invalid or expired")
                     elif e.status_code == 400:
                         print("Bad request: Check the format of your request and tools")
+                        error_message = str(e)
+                        if "tools.0" in error_message and "Extra inputs are not permitted" in error_message:
+                            print("CRITICAL ERROR: Tool structure error detected!")
+                            print(f"Full error message: {error_message}")
+                            print("This means there's a problem with the tool structure")
+                            # Print a simplified version of the tools for debugging
+                            if "tools" in kwargs:
+                                for i, tool in enumerate(kwargs["tools"]):
+                                    print(f"\nTOOL {i} STRUCTURE:")
+                                    if "custom" in tool:
+                                        custom_obj = tool["custom"]
+                                        print(f"- name: {custom_obj.get('name')}")
+                                        print(f"- CUSTOM KEYS: {list(custom_obj.keys())}")
+                                        if "type" in custom_obj:
+                                            print(f"  FOUND ILLEGAL 'type' KEY: {custom_obj['type']}")
                         if "tools" in kwargs:
                             print(f"Number of tools in request: {len(kwargs['tools'])}")
                     elif e.status_code == 429:
@@ -517,20 +569,85 @@ class MCPConfigClient:
                     # Re-raise to be caught by outer exception handler
                     raise
             
-            # Run the blocking API call in a thread pool
-            loop = asyncio.get_running_loop()
-            result = await loop.run_in_executor(None, call_anthropic)
+            # Run the API call directly using async methods if possible
+            try:
+                # First try running directly with async client to avoid thread pool issues
+                client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+                
+                # Prepare the request parameters
+                kwargs = {
+                    "model": "claude-3-7-sonnet-20250219",
+                    "max_tokens": 4000,
+                    "system": system_prompt,
+                    "messages": [
+                        {"role": "user", "content": message}
+                    ]
+                }
+                
+                # Add tools if available
+                if server_contexts and available_tools:
+                    kwargs["tools"] = available_tools
+                
+                print("Sending request directly using async Anthropic API")
+                response = await client.messages.create(**kwargs)
+                
+                # Convert response to dictionary immediately
+                result = {
+                    "id": response.id,
+                    "model": response.model,
+                    "content": []
+                }
+                
+                # Convert content items to dictionaries
+                for item in response.content:
+                    content_item = {"type": item.type}
+                    if hasattr(item, "text"):
+                        content_item["text"] = item.text
+                    if item.type == "tool_use":
+                        content_item["id"] = item.id
+                        content_item["name"] = item.name
+                        content_item["input"] = item.input
+                    result["content"].append(content_item)
+                
+                print("Successfully got response using async Anthropic API")
+            except Exception as direct_error:
+                print(f"Error using async approach: {direct_error}, falling back to thread pool")
+                # Fall back to thread pool approach
+                loop = asyncio.get_running_loop()
+                result = await loop.run_in_executor(None, call_anthropic)
             
-            # Handle tool calls in the response, using SDK patterns
-            if hasattr(result, "content") and any(item.type == "tool_use" for item in result.content):
+            # Convert result to a dict to avoid "object Message can't be used in 'await' expression"
+            if isinstance(result, dict):
+                result_dict = result  # Already a dict, no conversion needed
+            else:
+                # Convert Message object to dict
+                result_dict = {
+                    "id": result.id,
+                    "model": result.model,
+                    "content": [{"type": item.type, "text": item.text if hasattr(item, "text") else ""} 
+                               for item in result.content]
+                }
+                
+                # Add tool_calls if they exist
+                if hasattr(result, "tool_calls"):
+                    result_dict["tool_calls"] = result.tool_calls
+            
+            # Handle tool calls in the response, using dict format
+            tool_calls_detected = False
+            for content_item in result_dict.get("content", []):
+                if content_item.get("type") == "tool_use":
+                    tool_calls_detected = True
+                    break
+                
+            if tool_calls_detected:
                 print("Tool use detected in response")
                 
                 tool_calls = []
-                for content_item in result.content:
-                    if content_item.type == "tool_use":
-                        tool_use_id = content_item.id
-                        tool_name = content_item.name
-                        tool_input = content_item.input
+                for content_item in result_dict.get("content", []):
+                    if content_item.get("type") == "tool_use":
+                        tool_use_id = content_item.get("id", "")
+                        tool_name = content_item.get("name", "")
+                        tool_input = content_item.get("input", {})
                         server_name = server_tool_map.get(tool_name)
                         
                         tool_calls.append({
@@ -571,20 +688,12 @@ class MCPConfigClient:
                                 "error": str(e)
                             })
                 
-                # Convert the Anthropic response to a standardized format
-                result_dict = {
-                    "id": result.id,
-                    "model": result.model,
-                    "content": [{"type": item.type, "text": item.text} for item in result.content if hasattr(item, "text")],
-                    "tools": tool_results  # Add tool results to the response
-                }
+                # Update the result_dict with tool results
+                result_dict["tools"] = tool_results  # Add tool results to the response
             else:
-                # No tool calls, just format the response
-                result_dict = {
-                    "id": result.id,
-                    "model": result.model,
-                    "content": [{"type": item.type, "text": item.text} for item in result.content if hasattr(item, "text")]
-                }
+                # Make sure there's a content list
+                if "content" not in result_dict:
+                    result_dict["content"] = []
             
             return result_dict
         except Exception as e:

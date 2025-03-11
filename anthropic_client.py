@@ -70,27 +70,72 @@ class AnthropicClient:
         return cleaned
     
     def _format_tool(self, tool: Dict[str, Any]) -> Dict[str, Any]:
-        """Format a tool definition for Anthropic's API using custom type as required."""
+        """Format a tool definition for Anthropic's API using custom type as required by API error."""
         # Extract basic tool properties
         tool_name = tool.get("name", "unknown_tool")
         tool_description = tool.get("description", "No description available")
         
-        # Create the proper tool structure using "custom" as required by API error message:
-        # "tools.0: Input tag 'function' found using 'type' does not match
-        # any of the expected tags: 'bash_20250124', 'custom', 'text_editor_20250124'"
+        # Create properties based on tool name
+        properties = {}
+        if tool_name.lower() == "list_files" or tool_name.lower() == "list_directory":
+            properties = {
+                "directory": {
+                    "description": "The directory to list files in",
+                    "type": "string"
+                }
+            }
+        elif tool_name.lower() == "read_file":
+            properties = {
+                "file_path": {
+                    "description": "Path to the file to read",
+                    "type": "string"
+                }
+            }
+        elif tool_name.lower() == "write_file":
+            properties = {
+                "file_path": {
+                    "description": "Path to the file to write",
+                    "type": "string"
+                },
+                "content": {
+                    "description": "Content to write to the file",
+                    "type": "string"
+                }
+            }
+        else:
+            properties = {
+                "args": {
+                    "description": "Arguments for the tool as a JSON string",
+                    "type": "string"
+                }
+            }
+        
+        # Create parameters object
+        parameters = {
+            "type": "object",
+            "properties": properties,
+            "required": []
+        }
+        
+        # Add required fields based on tool type
+        if tool_name.lower() == "list_files" or tool_name.lower() == "list_directory":
+            parameters["required"] = ["directory"]
+        elif tool_name.lower() == "read_file":
+            parameters["required"] = ["file_path"]
+        elif tool_name.lower() == "write_file":
+            parameters["required"] = ["file_path", "content"]
+        
+        # Create the proper tool structure with parameters
         formatted_tool = {
             "type": "custom",
             "custom": {
                 "name": tool_name,
                 "description": tool_description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {}
-                }
+                "parameters": parameters
             }
         }
         
-        print(f"Created custom tool structure for {tool_name}")
+        print(f"Created custom tool structure for {tool_name} with proper parameters format")
         return formatted_tool
 
     async def send_prompt(self, prompt: str, tools: List[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -132,22 +177,72 @@ class AnthropicClient:
             # Log the number of tools
             print(f"Received {len(tools)} tools")
             
-            # Use a minimal valid format for each tool
+            # Use a minimal valid format for each tool with custom type as required by API error
             minimal_tools = []
             for tool in tools:
-                # Create proper tool format with custom as required by API
+                # Create proper tool format with simplified properties
                 tool_name = tool.get("name", "unknown")
                 tool_desc = tool.get("description", "No description")
                 
+                # Customize properties based on tool name WITH PROPER TYPE FIELDS
+                # Error: "tools.0.custom.type: Extra inputs are not permitted" occurs when structure is incorrect
+                simple_properties = {}
+                if tool_name.lower() == "list_files" or tool_name.lower() == "list_directory":
+                    simple_properties = {
+                        "directory": {
+                            "description": "The directory to list files in",
+                            "type": "string"
+                        }
+                    }
+                elif tool_name.lower() == "read_file":
+                    simple_properties = {
+                        "file_path": {
+                            "description": "Path to the file to read",
+                            "type": "string"
+                        }
+                    }
+                elif tool_name.lower() == "write_file":
+                    simple_properties = {
+                        "file_path": {
+                            "description": "Path to the file to write",
+                            "type": "string"
+                        },
+                        "content": {
+                            "description": "Content to write to the file",
+                            "type": "string"
+                        }
+                    }
+                else:
+                    # Generic format for other tools
+                    simple_properties = {
+                        "args": {
+                            "description": "Arguments for the tool as a JSON string",
+                            "type": "string"
+                        }
+                    }
+                
+                # Create the parameters object in the format Claude expects
+                parameters = {
+                    "type": "object",
+                    "properties": simple_properties,
+                    "required": []
+                }
+                
+                # Add required parameters based on tool type
+                if tool_name.lower() == "list_files" or tool_name.lower() == "list_directory":
+                    parameters["required"] = ["directory"]
+                elif tool_name.lower() == "read_file":
+                    parameters["required"] = ["file_path"]
+                elif tool_name.lower() == "write_file":
+                    parameters["required"] = ["file_path", "content"]
+                
+                # Complete tool format with parameters as required by Claude API
                 minimal_tool = {
                     "type": "custom",
                     "custom": {
                         "name": tool_name,
                         "description": tool_desc,
-                        "parameters": {
-                            "type": "object",
-                            "properties": {}
-                        }
+                        "parameters": parameters
                     }
                 }
                 minimal_tools.append(minimal_tool)

@@ -448,19 +448,44 @@ class MCPConfigClient:
                         # Always add type:object to the schema
                         schema_params['type'] = 'object'
                         
-                        # THIS IS THE EXACT FORMAT REQUIRED BY ANTHROPIC API
-                        # ACCORDING TO THE ERROR MESSAGE:
-                        # "tools.0: Input tag 'function' found using 'type' does not match any of the expected tags: 'bash_20250124', 'custom', 'text_editor_20250124'"
-                        # We must use 'custom' as the type
-                        tool_dict = {
-                            "type": "custom",   # Must be "custom" according to API error
-                            "custom": {         # Must be "custom" according to API error
-                                "name": tool_name,
-                                "description": tool_description,
-                                "parameters": {
-                                    "type": "object",
-                                    "properties": {}
+                        # Simplify properties based on tool name - REMOVING ALL TYPE FIELDS
+                        # Error: "tools.0.custom.type: Extra inputs are not permitted"
+                        simple_properties = {}
+                        if tool_name.lower() == "list_files" or tool_name.lower() == "list_directory":
+                            simple_properties = {
+                                "directory": {
+                                    "description": "The directory to list files in"
                                 }
+                            }
+                        elif tool_name.lower() == "read_file":
+                            simple_properties = {
+                                "file_path": {
+                                    "description": "Path to the file to read"
+                                }
+                            }
+                        elif tool_name.lower() == "write_file":
+                            simple_properties = {
+                                "file_path": {
+                                    "description": "Path to the file to write"
+                                },
+                                "content": {
+                                    "description": "Content to write to the file"
+                                }
+                            }
+                        else:
+                            # Generic format for other tools
+                            simple_properties = {
+                                "args": {
+                                    "description": "Arguments for the tool as a JSON string"
+                                }
+                            }
+                        
+                        # ULTRA-MINIMAL implementation - absolute bare minimum required fields
+                        tool_dict = {
+                            "type": "custom",
+                            "custom": {
+                                "name": tool_name,
+                                "description": tool_description
                             }
                         }
                         
@@ -478,8 +503,8 @@ class MCPConfigClient:
         if available_tools:
             system_prompt += "\n\nYou have access to the following tools from MCP servers:"
             for i, tool in enumerate(available_tools, 1):
-                tool_name = tool['custom']['name']  # Using custom as required by API
-                tool_desc = tool['custom']['description']  # Using custom as required by API
+                tool_name = tool['custom']['name']  # Updated to use custom format
+                tool_desc = tool['custom']['description']  # Updated to use custom format
                 server = server_tool_map.get(tool_name, "unknown")
                 system_prompt += f"\n{i}. {tool_name} (from {server}): {tool_desc}"
         
@@ -508,7 +533,7 @@ class MCPConfigClient:
                         
                         # Print first tool for debugging
                         if available_tools:
-                            print(f"First tool: {available_tools[0]['custom']['name']}")
+                            print(f"First tool: {available_tools[0]['function']['name']}")
                             print(json.dumps(available_tools[0], indent=2))
                     
                     # Print debugging information

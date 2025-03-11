@@ -8,6 +8,7 @@ import Sidebar from './components/Sidebar';
 import ServerManagement from './components/ServerManagement';
 import ChatInterface from './components/ChatInterface';
 import ToolsPanel from './components/ToolsPanel';
+import ResourcesPanel from './components/ResourcesPanel';
 
 // Define interfaces for the entities
 interface Tool {
@@ -23,6 +24,16 @@ interface Prompt {
 
 interface Resource {
   uri: string;
+  name?: string;
+  description?: string;
+  mimeType?: string;
+  server?: string;
+}
+
+interface ResourceContent {
+  uri: string;
+  mimeType?: string;
+  text: string;
 }
 
 const MainContainer = styled(Box)(({ theme }) => ({
@@ -79,6 +90,22 @@ const App: React.FC = () => {
     
     return () => clearInterval(intervalId);
   }, []);
+  
+  // Fetch resources when the view changes to 'resources'
+  useEffect(() => {
+    if (activeView === 'resources' && connectedServers.length > 0) {
+      console.log("Resources view activated - fetching resources...");
+      fetchResources();
+    }
+  }, [activeView, connectedServers]);
+  
+  // Fetch tools when the view changes to 'tools'
+  useEffect(() => {
+    if (activeView === 'tools' && connectedServers.length > 0) {
+      console.log("Tools view activated - fetching tools...");
+      fetchTools();
+    }
+  }, [activeView, connectedServers]);
 
   // Fetch servers list
   const fetchServers = async () => {
@@ -268,25 +295,65 @@ const App: React.FC = () => {
     }
   };
 
-  // Send a message to the LLM
-  const handleSendMessage = async (message: string) => {
+  // Fetch content of a specific resource
+  const handleFetchResource = async (serverName: string, uri: string): Promise<ResourceContent> => {
     setError(null);
     try {
-      const res = await fetch(`${backendUrl}/prompt`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          prompt: message,
-          server_contexts: connectedServers  // Pass all connected servers for context
-        })
+      const encodedUri = encodeURIComponent(uri);
+      const res = await fetch(`${backendUrl}/resources/${serverName}/${encodedUri}/content`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
       });
       
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.detail || 'Failed to send message');
+        throw new Error(errorData.detail || 'Failed to fetch resource content');
       }
       
       const data = await res.json();
+      return data.content;
+    } catch (error) {
+      console.error(`Error fetching resource "${uri}"`, error);
+      throw error;
+    }
+  };
+
+  // Send a message to the LLM
+  const handleSendMessage = async (message: string) => {
+    setError(null);
+    try {
+      console.log("Sending message to backend:", message);
+      console.log("Connected servers:", connectedServers);
+      
+      // Only include server_contexts when we have connected servers
+      const requestBody = connectedServers.length > 0 
+        ? { prompt: message, server_contexts: connectedServers }
+        : { prompt: message };
+        
+      const res = await fetch(`${backendUrl}/prompt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+      
+      // Log the response status
+      console.log("Response status:", res.status);
+      
+      if (!res.ok) {
+        let errorMessage = 'Failed to send message';
+        try {
+          const errorData = await res.json();
+          errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+          // If the response can't be parsed as JSON, use the status text
+          errorMessage = `${res.status}: ${res.statusText}`;
+        }
+        console.error("Error response:", errorMessage);
+        throw new Error(errorMessage);
+      }
+      
+      const data = await res.json();
+      console.log("Response data:", data);
       return data;
     } catch (error) {
       console.error("Error sending message", error);
@@ -337,9 +404,13 @@ const App: React.FC = () => {
           )}
           
           {activeView === 'resources' && (
-            <Box>
-              {/* Resources Panel Component would go here */}
-            </Box>
+            <ResourcesPanel
+              resources={resources}
+              servers={connectedServers}
+              onFetchResource={handleFetchResource}
+              onRefresh={fetchResources}
+              loading={loading}
+            />
           )}
         </ContentContainer>
       </MainContainer>

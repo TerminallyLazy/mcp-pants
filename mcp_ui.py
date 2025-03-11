@@ -6,11 +6,15 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 import aiohttp
 from dotenv import load_dotenv, find_dotenv
+from anthropic_client import AnthropicClient
 
 import importlib.util
 
 # Load environment variables from .env file
 load_dotenv(find_dotenv())
+
+# Initialize Anthropic client
+anthropic_client = AnthropicClient()
 
 # Dynamically import the mcp-client module.
 # (For convenience, you might consider renaming mcp-client.py to mcp_client.py.)
@@ -151,11 +155,6 @@ async def call_tool(server_name: str, tool_name: str, request: CallToolRequest):
 
 @app.post("/prompt")
 async def send_prompt(request: PromptRequest):
-    # Check if Anthropic API key is set in .env file
-    anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not anthropic_api_key:
-        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not found in .env file. Please add it to your .env file.")
-
     connected_servers = await client.get_connected_servers()
     if not connected_servers:
         # Still allow the prompt to be sent even if no servers are connected
@@ -165,11 +164,25 @@ async def send_prompt(request: PromptRequest):
         # Use the specified server contexts or default to all connected servers
         server_contexts = request.server_contexts if request.server_contexts else connected_servers
         
-        # Call the updated send_prompt method
-        result = await client.send_prompt(request.prompt, server_contexts)
+        # Get tools from connected servers
+        tools = []
+        for server in server_contexts:
+            server_tools = await client.list_tools(server)
+            if server_tools:
+                tools.extend([tool_to_dict(tool) for tool in server_tools])
+        
+        # Send prompt to Anthropic API with tools
+        result = await anthropic_client.send_prompt(request.prompt, tools)
         
         if not result:
             raise HTTPException(status_code=500, detail="Failed to get response from Anthropic API")
+            
+        # Check if there was an error
+        if result.get("error", False):
+            error_message = result.get("message", "Unknown error")
+            error_details = result.get("details", "")
+            print(f"Error details from Anthropic API: {error_details}")
+            raise HTTPException(status_code=500, detail=error_message)
         
         # Process the result
         response_content = ""
@@ -186,14 +199,16 @@ async def send_prompt(request: PromptRequest):
             for tool in result["tools"]:
                 tools_used.append({
                     "name": tool["name"],
-                    "server": tool["server"],
-                    "args": tool["args"],
-                    "result": tool["result"]
+                    "server": tool.get("server", "unknown"),
+                    "args": tool.get("arguments", {}),
+                    "result": tool.get("output", "")
                 })
         
         return {
             "response": response_content,
-            "tools": tools_used
+            "tools": tools_used,
+            "id": result.get("id", ""),
+            "model": result.get("model", "claude-3-sonnet-20240229")
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error sending prompt: {str(e)}")

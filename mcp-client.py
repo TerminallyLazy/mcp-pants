@@ -49,7 +49,7 @@ async def handle_sampling_message(message: types.CreateMessageRequestParams) -> 
                 type="text",
                 text="Error: ANTHROPIC_API_KEY environment variable not set.",
             ),
-            model="claude-3-7-sonnet-20250219",
+            model="claude-3-sonnet-20240229",
             stopReason="error",
         )
 
@@ -70,7 +70,7 @@ async def handle_sampling_message(message: types.CreateMessageRequestParams) -> 
             
             # Create messages as shown in the example
             response = client.messages.create(
-                model="claude-3-7-sonnet-20250219",
+                model="claude-3-sonnet-20240229",
                 max_tokens=1024,
                 messages=[
                     {"role": "user", "content": user_message}
@@ -119,7 +119,7 @@ async def handle_sampling_message(message: types.CreateMessageRequestParams) -> 
                 type="text",
                 text=error_message,
             ),
-            model="claude-3-7-sonnet-20250219",
+            model="claude-3-sonnet-20240229",
             stopReason="error",
         )
 
@@ -436,21 +436,24 @@ class MCPConfigClient:
                         parameters = getattr(tool, 'inputSchema', {})
                         
                         # Format parameters according to Anthropic's API requirements
-                        schema_params = {
-                            "type": "object",
-                            "properties": parameters.get('properties', {})
-                        }
+                        schema_params = {}
                         
+                        if 'properties' in parameters:
+                            schema_params['properties'] = parameters.get('properties', {})
+                            
                         if 'required' in parameters:
                             schema_params['required'] = parameters['required']
+                            
+                        # Always add type:object to the schema
+                        schema_params['type'] = 'object'
                         
-                        # Format tool for Anthropic API using function calling format
+                        # Format tool for Anthropic API using custom tool format
                         tool_dict = {
-                            "type": "function",
-                            "function": {
+                            "type": "custom",  # Use custom instead of function
+                            "custom": {
                                 "name": tool_name,
                                 "description": tool_description,
-                                "parameters": schema_params
+                                "input_schema": schema_params
                             }
                         }
                         
@@ -466,8 +469,8 @@ class MCPConfigClient:
         if available_tools:
             system_prompt += "\n\nYou have access to the following tools from MCP servers:"
             for i, tool in enumerate(available_tools, 1):
-                tool_name = tool['function']['name']
-                tool_desc = tool['function']['description']
+                tool_name = tool['custom']['name']
+                tool_desc = tool['custom']['description']
                 server = server_tool_map.get(tool_name, "unknown")
                 system_prompt += f"\n{i}. {tool_name} (from {server}): {tool_desc}"
         
@@ -479,7 +482,7 @@ class MCPConfigClient:
                     
                     # Prepare the request parameters
                     kwargs = {
-                        "model": "claude-3-7-sonnet-20250219",
+                        "model": "claude-3-sonnet-20240229",
                         "max_tokens": 4000,
                         "system": system_prompt,
                         "messages": [
@@ -487,15 +490,15 @@ class MCPConfigClient:
                         ]
                     }
                     
-                    # If there are tools, add them to the request
-                    if available_tools:
+                    # If there are server contexts and tools available, add them to the request
+                    if server_contexts and available_tools:
                         kwargs["tools"] = available_tools
                     
                     # Print debugging information
                     print(f"Sending request to Anthropic API using Python client")
                     print(f"Number of tools: {len(available_tools)}")
                     if available_tools:
-                        print(f"First tool: {available_tools[0]['function']['name']}")
+                        print(f"First tool: {available_tools[0]['custom']['name']}")
                     
                     # Make the API call
                     response = client.messages.create(**kwargs)
@@ -555,6 +558,7 @@ class MCPConfigClient:
                                 "id": tool_call["id"],
                                 "name": tool_name,
                                 "server": server_name,
+                                "input": tool_input,  # Include the input for use in UI
                                 "result": tool_result
                             })
                         except Exception as e:
@@ -563,6 +567,7 @@ class MCPConfigClient:
                                 "id": tool_call["id"],
                                 "name": tool_name,
                                 "server": server_name,
+                                "input": tool_input,  # Include the input for use in UI
                                 "error": str(e)
                             })
                 
@@ -583,8 +588,17 @@ class MCPConfigClient:
             
             return result_dict
         except Exception as e:
-            print(f"Error sending prompt: {e}")
-            return None
+            error_details = str(e)
+            if hasattr(e, "__dict__"):
+                error_attrs = {k: str(v) for k, v in e.__dict__.items() if k != "args"}
+                error_details += f"\nError details: {json.dumps(error_attrs, indent=2)}"
+            
+            print(f"Error sending prompt: {error_details}")
+            return {
+                "error": True,
+                "message": f"Failed to get response from Anthropic API: {str(e)}",
+                "details": error_details
+            }
 
     async def list_prompts(self):
         """List available prompts on the current server."""

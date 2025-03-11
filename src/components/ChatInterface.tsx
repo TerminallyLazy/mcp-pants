@@ -90,7 +90,8 @@ const TypingIndicator = () => (
 interface Tool {
   name: string;
   server: string;
-  args: any;
+  args?: any;
+  input?: any;
   result: any;
 }
 
@@ -143,13 +144,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, connectedS
       // Check if the response contains tool usage
       const hasTools = response.tools && response.tools.length > 0;
       
+      // Make sure we handle the response correctly
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: response.response || 'No response',
+        content: response.response || '',
         timestamp: new Date(),
         tools: hasTools ? response.tools : undefined,
       };
+      
+      console.log("Assistant response:", response);
       
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
@@ -395,7 +399,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, connectedS
                                 fontSize: '0.85rem',
                                 mb: 2
                               }}>
-                                <pre>{JSON.stringify(tool.args, null, 2)}</pre>
+                                <pre>{JSON.stringify(tool.args || tool.input || {}, null, 2)}</pre>
                               </Box>
                               
                               {renderToolResult(tool)}
@@ -502,4 +506,4 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, connectedS
   );
 };
 
-export default ChatInterface; 
+export default ChatInterface;

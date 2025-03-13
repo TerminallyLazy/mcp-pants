@@ -6,9 +6,9 @@
           "-y",
           "@supabase/mcp-server-postgrest",
           "--apiUrl",
-          "***REMOVED***",
+          "",
           "--apiKey",
-          "***REMOVED***",
+          "",
           "--schema",
           "public"
         ]
@@ -27,7 +27,7 @@
         "args": [
           "-y",
           "@modelcontextprotocol/server-filesystem",
-          "/home/lazy/Projects"
+          ""
         ]
       },
       "mcp-installer": {
@@ -44,7 +44,7 @@
           "@modelcontextprotocol/server-brave-search"
         ],
         "env": {
-          "BRAVE_API_KEY": "BSAsGPAsbtbA-0P-hX4HEiqfnCpaymR"
+          "BRAVE_API_KEY": ""
         }
       },
       "memory": {

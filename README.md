@@ -57,6 +57,10 @@ A powerful user interface for interacting with Multiple Cloud Providers (MCP) se
 
 3. Open your browser and navigate to http://localhost:5173
 
+![Image 1](https://cdn.discordapp.com/attachments/1053882445017124977/1348910293194903574/image.png?ex=67d3d11b&is=67d27f9b&hm=dede5e76ccb94967a5a0657263e2a629e0a72be4da887d78f0796008a2aa2739&)
+![Image 2](https://cdn.discordapp.com/attachments/1053882445017124977/1348910293551681587/image.png?ex=67d3d11b&is=67d27f9b&hm=8b0a57ab1b6f2f21a3ed1553ce2c29042fc3631f4be26cdb202da8c52af8b417&)
+![Image 3](https://cdn.discordapp.com/attachments/1053882445017124977/1348910376691044414/image.png?ex=67d3d12f&is=67d27faf&hm=91e65134de255970e0c6f3bd0bbe4ba53a5b896fb92aac2dcfa107e07d7e3023&)
+
 ## Using the MCP Client UI
 
 ### Connecting to MCP Servers

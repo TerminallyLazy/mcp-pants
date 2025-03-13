@@ -6,9 +6,9 @@
           "-y",
           "@supabase/mcp-server-postgrest",
           "--apiUrl",
-          "https://njhibesggyagmezbergr.supabase.co/rest/v1",
+          "",
           "--apiKey",
-          "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5qaGliZXNnZ3lhZ21lemJlcmdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzIzNDU2MzYsImV4cCI6MjA0NzkyMTYzNn0.3sRCPLi5_NHAVVw3HloLIzkNSHrZqr9aRDNDs3f0OTw",
+          "",
           "--schema",
           "public"
         ]
@@ -27,7 +27,7 @@
         "args": [
           "-y",
           "@modelcontextprotocol/server-filesystem",
-          "/home/lazy/Projects"
+          ""
         ]
       },
       "mcp-installer": {
@@ -44,7 +44,7 @@
           "@modelcontextprotocol/server-brave-search"
         ],
         "env": {
-          "BRAVE_API_KEY": "BSAsGPAsbtbA-0P-hX4HEiqfnCpaymR"
+          "BRAVE_API_KEY": ""
         }
       },
       "memory": {
